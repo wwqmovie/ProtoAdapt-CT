@@ -49,12 +49,12 @@ Add a new task by creating `data/downstream/{task}/train.csv` and `test.csv`.
 
 ## Pipeline
 
-| Stage | Description |
-|-------|-------------|
-| S1-S3 (Image) | Build prototypes from labeled features, assign pseudo-labels to pretrain features via Top20% threshold |
-| S4 (Text) | LaMed generates English reports from CT, SBERT compares with original reports, filters inconsistent pseudo-labels |
-| FP | Feature calibration pulls pseudo-label features toward class prototypes |
-| Train | ResNet1D trains on labeled + calibrated pseudo-label data |
+| Stage         | Description                                                                                                       |
+| ------------- | ----------------------------------------------------------------------------------------------------------------- |
+| S1-S3 (Image) | Build prototypes from labeled features, assign pseudo-labels to pretrain features via prototype similarity            |
+| S4 (Text)     | LaMed generates English reports from CT, SBERT compares with original reports, filters inconsistent pseudo-labels |
+| FP            | Feature calibration pulls pseudo-label features toward class prototypes                                           |
+| Train         | ResNet1D trains on labeled + calibrated pseudo-label data                                                         |
 
 Output: `output/predictions.csv` and `output/best_model.pth`.
 
