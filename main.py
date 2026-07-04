@@ -28,8 +28,7 @@ from protoadapt.optim import create_optimizer
 from protoadapt.utils import NativeScalerWithGradNormCount, cosine_scheduler
 
 
-def build_prototypes(train_csv):
-    df = pd.read_csv(train_csv)
+def build_prototypes(df):
     feats_0, feats_1 = [], []
     for _, r in df.iterrows():
         f = torch.load(r["feature_path"], map_location="cpu", weights_only=False).float()
@@ -112,10 +111,12 @@ def calibrate_and_build_dtotal(df_train, df_pseudo, proto_0, proto_1, s0s, s1s, 
     return pd.DataFrame(rows)
 
 
-def train(df_dt, test_csv, output_dir, epochs=200, lr=4e-3, batch_size=256, device="cuda"):
+def train(df_dt, df_test, output_dir, epochs=200, lr=4e-3, batch_size=256, device="cuda"):
+    if isinstance(device, str):
+        device = torch.device(device)
     tmp_tr = os.path.join(output_dir, "_train.csv")
     tmp_te = os.path.join(output_dir, "_test.csv")
-    df_dt.to_csv(tmp_tr, index=False); pd.read_csv(test_csv).to_csv(tmp_te, index=False)
+    df_dt.to_csv(tmp_tr, index=False); df_test.to_csv(tmp_te, index=False)
 
     class A: pass
     args = A()
@@ -164,7 +165,7 @@ def train(df_dt, test_csv, output_dir, epochs=200, lr=4e-3, batch_size=256, devi
             ap.extend(F.softmax(o, dim=1)[:, 1].cpu().numpy())
             al.extend(b["labels"].numpy())
     ap, al = np.array(ap), np.array(al)
-    df_te = pd.read_csv(test_csv)
+    df_te = df_test
     n = min(len(df_te), len(al))
     df_pred = pd.DataFrame({
         "feature_path": df_te["feature_path"].values[:n], "label": al[:n].astype(int),
@@ -182,6 +183,8 @@ def main():
     parser.add_argument("--train_csv", default=None)
     parser.add_argument("--test_csv", default=None)
     parser.add_argument("--pretrain_dir", required=True)
+    parser.add_argument("--s4_csv", default=None,
+                        help="Pre-computed S4 scores CSV (feature_path, report_sim)")
     parser.add_argument("--ct_mapping", default=None, help="CSV for S4 CT→report mapping")
     parser.add_argument("--lamed_path", default=None, help="LaMed checkpoint path")
     parser.add_argument("--s4_threshold", type=float, default=0.60)
@@ -225,17 +228,24 @@ def main():
     print(f"Train: {len(df_train)}, Test: {len(df_test)}")
 
     # S1-S3: Prototypes + pseudo-labels
-    proto_0, proto_1, s0s, s1s = build_prototypes(train_csv)
+    proto_0, proto_1, s0s, s1s = build_prototypes(df_train)
     pcos = F.cosine_similarity(proto_0.unsqueeze(0), proto_1.unsqueeze(0)).item()
     print(f"Prototypes: cos_sim={pcos:.4f}")
 
     df_pseudo, pt_s0s, pt_s1s = assign_pseudo(args.pretrain_dir, proto_0, proto_1)
     print(f"Pseudo-labels: {len(df_pseudo)}")
 
-    # S4: Report filtering (if mapping + LaMed provided)
-    if args.ct_mapping and args.lamed_path:
+    # S4: Report filtering
+    if args.s4_csv and os.path.exists(args.s4_csv):
+        # Pre-computed scores (no LaMed needed)
+        df_s4 = pd.read_csv(args.s4_csv)
+        s4_dict = dict(zip(df_s4["feature_path"], df_s4["report_sim"]))
+        df_pseudo = df_pseudo[df_pseudo["feature_path"].apply(
+            lambda p: s4_dict.get(p, 0) > args.s4_threshold)]
+        print(f"After S4 (pre-computed): {len(df_pseudo)}")
+    elif args.ct_mapping and args.lamed_path:
         df_pseudo = s4_filter(df_pseudo, args.ct_mapping, args.lamed_path, args.s4_threshold)
-        print(f"After S4: {len(df_pseudo)}")
+        print(f"After S4 (live): {len(df_pseudo)}")
 
     # FP: Feature calibration + D_total
     calib_dir = os.path.join(args.output_dir, "calibrated")
@@ -244,7 +254,7 @@ def main():
     print(f"D_total: {len(df_dtotal)} (train={len(df_train)}+pseudo={len(df_pseudo)})")
 
     # Train
-    auc = train(df_dtotal, test_csv, args.output_dir,
+    auc = train(df_dtotal, df_test, args.output_dir,
                 epochs=args.epochs, lr=args.lr, device=args.device)
     print(f"Done: AUC={auc:.4f}")
 
