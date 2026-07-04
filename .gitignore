@@ -1,0 +1,9 @@
+data/pretrain/ct/
+data/pretrain/features/
+data/pretrain/reports/
+data/downstream/ct/
+data/downstream/features/
+output/
+__pycache__/
+*.pyc
+*.pth
