@@ -108,6 +108,9 @@ def extract_features(input_csv, output_dir, pretrained=None, batch_size=1, devic
         device: torch device
     """
     df = pd.read_csv(input_csv)
+    # Support train/test CSVs directly (img_path column)
+    if "img_path" not in df.columns:
+        raise ValueError("CSV must have 'img_path' column")
     os.makedirs(output_dir, exist_ok=True)
 
     model = build_model(pretrained, device)
@@ -132,8 +135,10 @@ def extract_features(input_csv, output_dir, pretrained=None, batch_size=1, devic
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Swin3D feature extraction")
-    parser.add_argument("--input_csv", required=True,
+    parser.add_argument("--input_csv", default=None,
                         help="CSV with img_path column")
+    parser.add_argument("--from_csv", default=None,
+                        help="Extract CTs from train/test CSV (reads img_path column)")
     parser.add_argument("--output_dir", required=True,
                         help="Directory to save .pt feature files")
     parser.add_argument("--pretrained", default=None,
@@ -141,5 +146,18 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--device", default="cuda")
     args = parser.parse_args()
-    extract_features(args.input_csv, args.output_dir,
+    input_csv = args.input_csv
+    if args.from_csv:
+        # Read img_path column from train/test CSV, create temp list
+        import tempfile
+        df = pd.read_csv(args.from_csv)
+        if "img_path" not in df.columns:
+            raise ValueError(f"{args.from_csv} must have 'img_path' column")
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False)
+        pd.DataFrame({"img_path": df["img_path"].unique()}).to_csv(tmp.name, index=False)
+        input_csv = tmp.name
+        print(f"Extracted {len(df)} CT paths from {args.from_csv}")
+    if input_csv is None:
+        raise ValueError("Either --input_csv or --from_csv required")
+    extract_features(input_csv, args.output_dir,
                      args.pretrained, args.batch_size, args.device)

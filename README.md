@@ -4,23 +4,21 @@ Report-Consistent Prototype Learning for Lung Cancer Assessment via CT Foundatio
 
 ## Quick Start
 
-### 1. Organize data
+### 1. Prepare three CSVs
 
 ```
 data/
 ├── pretrain/
 │   ├── ct/                    # upstream CTs (.nii.gz)
-│   ├── ct_list.csv            # column: img_path
-│   ├── reports/               # radiology reports (.txt)
-│   └── features/              # (generated)
+│   └── ct_list.csv            # img_path
 └── downstream/
     ├── ct/                    # labeled CTs (.nii.gz)
-    ├── ct_list.csv            # column: img_path
-    ├── features/              # (generated)
-    └── {task}/                # one subdirectory per task
-        ├── train.csv          # columns: feature_path, label
-        └── test.csv           # columns: feature_path, label
+    └── {task}/
+        ├── train.csv          # img_path, label
+        └── test.csv           # img_path, label
 ```
+
+That's it. Three CSVs total: one pretrain CT list, two task CSVs.
 
 ### 2. Extract features
 
@@ -31,7 +29,7 @@ python scripts/extract_features.py \
     --pretrained /path/to/swin3d_checkpoint.safetensors
 
 python scripts/extract_features.py \
-    --input_csv data/downstream/ct_list.csv \
+    --from_csv data/downstream/lung1/train.csv \
     --output_dir data/downstream/features/ \
     --pretrained /path/to/swin3d_checkpoint.safetensors
 ```
